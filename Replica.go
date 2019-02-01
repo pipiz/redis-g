@@ -191,7 +191,7 @@ func receive() interface{} {
 }
 
 func connect(address string) {
-	conn, e := net.Dial("tcp", address)
+	conn, e := net.Dial("tcp4", address)
 	if e != nil {
 		panic(e)
 	}
