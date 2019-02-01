@@ -40,7 +40,7 @@ func (replica *Replica) Close() {
 
 func sync(replica *Replica) {
 	fmt.Printf("PSYNC %s %d\n", replica.Config.ReplicaId, replica.Config.ReplicaOffset)
-	send("PSYNC", replica.Config.ReplicaId, string(replica.Config.ReplicaOffset))
+	send("PSYNC", replica.Config.ReplicaId, strconv.Itoa(replica.Config.ReplicaOffset))
 	reply := receive().(string)
 	fmt.Println(reply)
 	if strings.HasPrefix(reply, "FULLRESYNC") {
