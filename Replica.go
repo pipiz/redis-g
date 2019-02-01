@@ -8,14 +8,6 @@ import (
 	"strings"
 )
 
-const CR = '\r'
-const LF = '\n'
-const STAR = '*'
-const DOLLAR = '$'
-const PLUS = '+'
-const MINUS = '-'
-const COLON = ':'
-
 type Replica struct {
 	Address string
 	Config  Config
@@ -52,20 +44,16 @@ func sync(replica *Replica) {
 	reply := receive().(string)
 	fmt.Println(reply)
 	if strings.HasPrefix(reply, "FULLRESYNC") {
-		parseDump()
+		receive()
 		resp := strings.Split(reply, " ")
 		replica.Config.ReplicaId = resp[1]
 		offset, _ := strconv.Atoi(resp[2])
-		replica.Config.ReplicaOffset = int64(offset)
+		replica.Config.ReplicaOffset = offset
 	} else if strings.HasPrefix(reply, "CONTINUE") {
 
 	} else if strings.HasPrefix(reply, "NOMASTERLINK") || strings.HasPrefix(reply, "LOADING") {
 
 	}
-}
-
-func parseDump() {
-	// TODO
 }
 
 func sendSlaveCapa(command string) {
@@ -113,26 +101,26 @@ func auth(password string) {
 func send(command string, args ...string) {
 	commLen := len(command)
 	argsLen := len(args)
-	writer.WriteByte(STAR)
+	writer.WriteByte(Star)
 	writer.Write(getBytes(argsLen + 1))
-	writer.WriteByte(CR)
-	writer.WriteByte(LF)
-	writer.WriteByte(DOLLAR)
+	writer.WriteByte(Cr)
+	writer.WriteByte(Lf)
+	writer.WriteByte(Dollar)
 	writer.Write(getBytes(commLen))
-	writer.WriteByte(CR)
-	writer.WriteByte(LF)
+	writer.WriteByte(Cr)
+	writer.WriteByte(Lf)
 	writer.WriteString(command)
-	writer.WriteByte(CR)
-	writer.WriteByte(LF)
+	writer.WriteByte(Cr)
+	writer.WriteByte(Lf)
 	for i := 0; i < argsLen; i++ {
 		argLen := len(args[i])
-		writer.WriteByte(DOLLAR)
+		writer.WriteByte(Dollar)
 		writer.Write(getBytes(argLen))
-		writer.WriteByte(CR)
-		writer.WriteByte(LF)
+		writer.WriteByte(Cr)
+		writer.WriteByte(Lf)
 		writer.WriteString(args[i])
-		writer.WriteByte(CR)
-		writer.WriteByte(LF)
+		writer.WriteByte(Cr)
+		writer.WriteByte(Lf)
 	}
 	writer.Flush()
 }
@@ -145,27 +133,61 @@ func receive() interface{} {
 	for {
 		b, _ := reader.ReadByte()
 		switch b {
-		case PLUS: // RESP Simple Strings
+		case Plus: // RESP Simple Strings
 			var builder strings.Builder
-			for byt, _ := reader.ReadByte(); byt != CR; {
-				builder.WriteByte(byt)
-				byt, _ = reader.ReadByte()
+			for {
+				for byt, e := reader.ReadByte(); byt != Cr && e == nil; {
+					builder.WriteByte(byt)
+					byt, _ = reader.ReadByte()
+				}
+				if byt, e := reader.ReadByte(); byt == Lf {
+					return builder.String()
+				} else if e == nil {
+					builder.WriteByte(byt)
+				}
 			}
-			if byt, _ := reader.ReadByte(); byt == LF {
-				return builder.String()
-			}
-		case MINUS: // RESP Errors
+		case Minus: // RESP Errors
 			var builder strings.Builder
-			for byt, _ := reader.ReadByte(); byt != CR; {
-				builder.WriteByte(byt)
-				byt, _ = reader.ReadByte()
+			for {
+				for byt, e := reader.ReadByte(); byt != Cr && e == nil; {
+					builder.WriteByte(byt)
+					byt, e = reader.ReadByte()
+				}
+				if byt, e := reader.ReadByte(); byt == Lf {
+					return builder.String()
+				} else if e == nil {
+					builder.WriteByte(byt)
+				}
 			}
-			if byt, _ := reader.ReadByte(); byt == LF {
-				return builder.String()
+		case Dollar: // RESP Bulk Strings
+			var builder strings.Builder
+			for {
+				for byt, e := reader.ReadByte(); byt != Cr && e == nil; {
+					builder.WriteByte(byt)
+					byt, e = reader.ReadByte()
+				}
+				if byt, e := reader.ReadByte(); byt == Lf {
+					break
+				} else if e == nil {
+					builder.WriteByte(byt)
+				}
 			}
+			resp := builder.String()
+			var size int
+			if !strings.HasPrefix(resp, "EOF:") {
+				_size, err := strconv.Atoi(resp)
+				size = _size
+				if err != nil {
+					return -1
+				}
+			}
+			return parseRdb(size)
+		case '\n':
+		default:
+			break
 		}
 	}
-	return nil
+	return ""
 }
 
 func connect(address string) {

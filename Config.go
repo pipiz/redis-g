@@ -3,7 +3,7 @@ package main
 type Config struct {
 	MasterAuth    string
 	ReplicaId     string
-	ReplicaOffset int64
+	ReplicaOffset int
 }
 
 func defaultConfiguration() Config {
