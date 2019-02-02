@@ -43,18 +43,14 @@ func parseRdb(size int) string {
 		case HashZipList:
 			name := readString()
 			fmt.Printf("%s: {\n", string(name))
-
 			bytes := readString()
 			byteReader := bytes2.NewReader(bytes)
 
-			arr := make([]byte, 4)
-			byteReader.Read(arr)
+			readZlBytes(byteReader)
 
-			byteReader.Read(arr)
+			readZlTail(byteReader)
 
-			arr = arr[:2]
-			byteReader.Read(arr)
-			zlLen := binary.LittleEndian.Uint16(arr)
+			zlLen := readZlLen(byteReader)
 
 			for ; zlLen > 0; zlLen -= 2 {
 				field := readZipListEntry(byteReader)
@@ -72,14 +68,11 @@ func parseRdb(size int) string {
 				bytes = readString()
 				byteReader := bytes2.NewReader(bytes)
 
-				arr := make([]byte, 4)
-				byteReader.Read(arr)
+				readZlBytes(byteReader)
 
-				byteReader.Read(arr)
+				readZlTail(byteReader)
 
-				arr = arr[:2]
-				byteReader.Read(arr)
-				zlLen := binary.LittleEndian.Uint16(arr)
+				zlLen := readZlLen(byteReader)
 				for ; zlLen > 0; zlLen-- {
 					field := readZipListEntry(byteReader)
 					fmt.Printf("%s ", string(field))
@@ -97,6 +90,26 @@ func parseRdb(size int) string {
 				fmt.Printf("%s ", string(bytes))
 			}
 			fmt.Printf("]\n")
+		case ZsetZipList:
+			name := readString()
+			fmt.Printf("%s:", string(name))
+
+			bytes := readString()
+			byteReader := bytes2.NewReader(bytes)
+
+			readZlBytes(byteReader)
+
+			readZlTail(byteReader)
+
+			zlLen := readZlLen(byteReader)
+
+			fmt.Printf("{\n")
+			for ; zlLen > 0; zlLen -= 2 {
+				field := readZipListEntry(byteReader)
+				score := readZipListEntry(byteReader)
+				fmt.Printf("\t%s %s\n", string(field), string(score))
+			}
+			fmt.Print("}\n")
 		case Eof:
 			if version >= 5 {
 				checksum := readInteger(8, true)
@@ -106,6 +119,23 @@ func parseRdb(size int) string {
 		}
 	}
 	return "OK"
+}
+
+func readZlLen(byteReader *bytes2.Reader) uint16 {
+	bytes := make([]byte, 2)
+	byteReader.Read(bytes)
+	zlLen := binary.LittleEndian.Uint16(bytes)
+	return zlLen
+}
+
+func readZlBytes(byteReader *bytes2.Reader) {
+	arr := make([]byte, 4)
+	byteReader.Read(arr)
+}
+
+func readZlTail(byteReader *bytes2.Reader) {
+	arr := make([]byte, 4)
+	byteReader.Read(arr)
 }
 
 func parseAUX() {
