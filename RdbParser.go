@@ -58,11 +58,9 @@ func parseRdb(size int) string {
 			byteReader.Read(arr)
 			zlLen := binary.LittleEndian.Uint16(arr)
 
-			for zlLen > 0 {
+			for ; zlLen > 0; zlLen -= 2 {
 				field := readZipListEntry(byteReader)
-				zlLen--
 				value := readZipListEntry(byteReader)
-				zlLen--
 				fmt.Printf("\t%s: %s\n", string(field), string(value))
 			}
 			fmt.Println("}")
@@ -115,28 +113,28 @@ func readZipListEntry(byteReader *bytes2.Reader) []byte {
 	switch specialFlag {
 	case ZipInt8Bit:
 		b, _ := byteReader.ReadByte()
-		return []byte(strconv.Itoa(int(b)))
+		return []byte(strconv.Itoa(int(int8(b))))
 	case ZipInt16Bit: // little endian
 		bytes := make([]byte, 2)
 		byteReader.Read(bytes)
-		u := binary.LittleEndian.Uint16(bytes)
+		u := toInt16(bytes, false)
 		return []byte(strconv.Itoa(int(u)))
 	case ZipInt24Bit: // little endian
 		bytes := make([]byte, 4)
 		bytes[0], _ = byteReader.ReadByte()
 		bytes[1], _ = byteReader.ReadByte()
 		bytes[2], _ = byteReader.ReadByte()
-		u := binary.LittleEndian.Uint32(bytes)
+		u := toInt32(bytes, false)
 		return []byte(strconv.Itoa(int(u)))
 	case ZipInt32Bit: // little endian
 		bytes := make([]byte, 4)
 		byteReader.Read(bytes)
-		u := binary.LittleEndian.Uint32(bytes)
+		u := toInt32(bytes, false)
 		return []byte(strconv.Itoa(int(u)))
 	case ZipInt64Bit: // little endian
 		bytes := make([]byte, 8)
 		byteReader.Read(bytes)
-		u := binary.LittleEndian.Uint64(bytes)
+		u := toInt64(bytes, false)
 		return []byte(strconv.Itoa(int(u)))
 	default:
 		result := specialFlag - 0xF1
@@ -153,10 +151,10 @@ func readString() string {
 			b, _ := reader.ReadByte()
 			return strconv.Itoa(int(b))
 		case 1:
-			integer := readInteger(2, true)
+			integer := readInteger(2, false)
 			return strconv.Itoa(int(integer))
 		case 2:
-			integer := readInteger(4, true)
+			integer := readInteger(4, false)
 			return strconv.Itoa(int(integer))
 		case 4:
 			// TODO LZF压缩的字符串
@@ -194,22 +192,12 @@ func readLength() Length {
 func readInteger(size int, isBigEndian bool) int {
 	bytes := make([]byte, size)
 	reader.Read(bytes)
-	if isBigEndian {
-		if size == 2 {
-			return int(binary.BigEndian.Uint16(bytes))
-		} else if size == 4 {
-			return int(binary.BigEndian.Uint32(bytes))
-		} else if size == 8 {
-			return int(binary.BigEndian.Uint64(bytes))
-		}
-	} else {
-		if size == 2 {
-			return int(binary.LittleEndian.Uint16(bytes))
-		} else if size == 4 {
-			return int(binary.LittleEndian.Uint32(bytes))
-		} else if size == 8 {
-			return int(binary.LittleEndian.Uint64(bytes))
-		}
+	if size == 2 {
+		return int(toInt16(bytes, isBigEndian))
+	} else if size == 4 {
+		return int(toInt32(bytes, isBigEndian))
+	} else if size == 8 {
+		return int(toInt64(bytes, isBigEndian))
 	}
 	return -1
 }
