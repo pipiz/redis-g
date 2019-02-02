@@ -86,6 +86,17 @@ func parseRdb(size int) string {
 				}
 			}
 			fmt.Printf("]\n")
+		case Set, List:
+			name := readString()
+			fmt.Printf("%s:", string(name))
+
+			fmt.Printf("[ ")
+			count := readLength()
+			for i := 0; i < count.val; i++ {
+				bytes = readString()
+				fmt.Printf("%s ", string(bytes))
+			}
+			fmt.Printf("]\n")
 		case Eof:
 			if version >= 5 {
 				checksum := readInteger(8, true)
