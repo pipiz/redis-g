@@ -39,14 +39,12 @@ func parseRdb(size int) string {
 			fmt.Println("db total keys:", len1.val)
 			fmt.Println("db expired keys:", len2.val)
 		case String:
-			fmt.Printf("%s: %s\n", readString(), readString())
+			fmt.Printf("%s: %s\n", string(readString()), string(readString()))
 		case HashZipList:
 			name := readString()
-			fmt.Printf("%s: {\n", name)
+			fmt.Printf("%s: {\n", string(name))
 
-			length := readLength()
-			bytes := make([]byte, length.val)
-			reader.Read(bytes)
+			bytes := readString()
 			byteReader := bytes2.NewReader(bytes)
 
 			arr := make([]byte, 4)
@@ -64,6 +62,30 @@ func parseRdb(size int) string {
 				fmt.Printf("\t%s: %s\n", string(field), string(value))
 			}
 			fmt.Println("}")
+		case ListQuickList:
+			name := readString()
+			fmt.Printf("%s:", string(name))
+
+			fmt.Printf("[ ")
+			count := readLength()
+			for i := 0; i < count.val; i++ {
+				bytes = readString()
+				byteReader := bytes2.NewReader(bytes)
+
+				arr := make([]byte, 4)
+				byteReader.Read(arr)
+
+				byteReader.Read(arr)
+
+				arr = arr[:2]
+				byteReader.Read(arr)
+				zlLen := binary.LittleEndian.Uint16(arr)
+				for ; zlLen > 0; zlLen-- {
+					field := readZipListEntry(byteReader)
+					fmt.Printf("%s ", string(field))
+				}
+			}
+			fmt.Printf("]\n")
 		case Eof:
 			if version >= 5 {
 				checksum := readInteger(8, true)
@@ -76,7 +98,7 @@ func parseRdb(size int) string {
 }
 
 func parseAUX() {
-	fmt.Printf("%s: %s\n", readString(), readString())
+	fmt.Printf("%s: %s\n", string(readString()), string(readString()))
 }
 
 func readZipListEntry(byteReader *bytes2.Reader) []byte {
@@ -143,26 +165,32 @@ func readZipListEntry(byteReader *bytes2.Reader) []byte {
 	return nil
 }
 
-func readString() string {
+func readString() []byte {
 	length := readLength()
 	if length.Special {
 		switch length.val {
 		case 0:
 			b, _ := reader.ReadByte()
-			return strconv.Itoa(int(b))
+			return []byte(strconv.Itoa(int(int8(b))))
 		case 1:
 			integer := readInteger(2, false)
-			return strconv.Itoa(int(integer))
+			return []byte(strconv.Itoa(int(integer)))
 		case 2:
 			integer := readInteger(4, false)
-			return strconv.Itoa(int(integer))
-		case 4:
-			// TODO LZF压缩的字符串
+			return []byte(strconv.Itoa(int(integer)))
+		case 3:
+			clenth := readLength()
+			length := readLength()
+			bytes := make([]byte, clenth.val)
+			reader.Read(bytes)
+			out := make([]byte, length.val)
+			Decompress(bytes, clenth.val, out, length.val)
+			return out
 		}
 	}
 	bytes := make([]byte, length.val)
 	reader.Read(bytes)
-	return string(bytes)
+	return bytes
 }
 
 func readLength() Length {

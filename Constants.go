@@ -14,6 +14,7 @@ const DbResize = 0xFB
 const String = 0
 const Eof = 0xFF
 const HashZipList = 13
+const ListQuickList = 14
 
 const ZipInt8Bit = 0xFE  /* 11111110*/
 const ZipInt16Bit = 0xC0 /* 11000000*/
