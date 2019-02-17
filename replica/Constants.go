@@ -1,4 +1,4 @@
-package main
+package replica
 
 const Cr = '\r'
 const Lf = '\n'

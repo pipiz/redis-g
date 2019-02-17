@@ -1,18 +1,19 @@
-package main
+package replica
 
 import (
 	bytes2 "bytes"
 	"encoding/binary"
 	"fmt"
+	"redis-g/util"
 	"strconv"
 )
 
 type Length struct {
 	val     int
-	Special bool
+	special bool
 }
 
-func parseRdb(size int) string {
+func parseRdb(size int) interface{} {
 	if size != -1 {
 		fmt.Printf("RDB size: %d byte\n", size)
 	}
@@ -180,24 +181,24 @@ func readZipListEntry(byteReader *bytes2.Reader) []byte {
 	case ZipInt16Bit: // little endian
 		bytes := make([]byte, 2)
 		byteReader.Read(bytes)
-		u := toInt16(bytes, false)
+		u := util.ToInt16(bytes, false)
 		return []byte(strconv.Itoa(int(u)))
 	case ZipInt24Bit: // little endian
 		bytes := make([]byte, 4)
 		bytes[0], _ = byteReader.ReadByte()
 		bytes[1], _ = byteReader.ReadByte()
 		bytes[2], _ = byteReader.ReadByte()
-		u := toInt32(bytes, false)
+		u := util.ToInt32(bytes, false)
 		return []byte(strconv.Itoa(int(u)))
 	case ZipInt32Bit: // little endian
 		bytes := make([]byte, 4)
 		byteReader.Read(bytes)
-		u := toInt32(bytes, false)
+		u := util.ToInt32(bytes, false)
 		return []byte(strconv.Itoa(int(u)))
 	case ZipInt64Bit: // little endian
 		bytes := make([]byte, 8)
 		byteReader.Read(bytes)
-		u := toInt64(bytes, false)
+		u := util.ToInt64(bytes, false)
 		return []byte(strconv.Itoa(int(u)))
 	default:
 		result := specialFlag - 0xF1
@@ -208,7 +209,7 @@ func readZipListEntry(byteReader *bytes2.Reader) []byte {
 
 func readString() []byte {
 	length := readLength()
-	if length.Special {
+	if length.special {
 		switch length.val {
 		case 0:
 			b, _ := reader.ReadByte()
@@ -225,7 +226,7 @@ func readString() []byte {
 			bytes := make([]byte, clenth.val)
 			reader.Read(bytes)
 			out := make([]byte, length.val)
-			Decompress(bytes, clenth.val, out, length.val)
+			util.Decompress(bytes, clenth.val, out, length.val)
 			return out
 		}
 	}
@@ -262,11 +263,11 @@ func readInteger(size int, isBigEndian bool) int {
 	bytes := make([]byte, size)
 	reader.Read(bytes)
 	if size == 2 {
-		return int(toInt16(bytes, isBigEndian))
+		return int(util.ToInt16(bytes, isBigEndian))
 	} else if size == 4 {
-		return int(toInt32(bytes, isBigEndian))
+		return int(util.ToInt32(bytes, isBigEndian))
 	} else if size == 8 {
-		return int(toInt64(bytes, isBigEndian))
+		return int(util.ToInt64(bytes, isBigEndian))
 	}
 	return -1
 }

@@ -1,9 +1,11 @@
 package main
 
+import (
+	"redis-g/replica"
+)
+
 func main() {
-	replica := Replica{}
-	replica.Address = "localhost:6379"
-	replica.Config = defaultConfiguration()
-	replica.Open()
-	replica.Close()
+	newReplica := replica.Replica{Address: "localhost:6379"}
+	newReplica.Open()
+	newReplica.Close()
 }
