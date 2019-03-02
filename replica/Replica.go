@@ -60,8 +60,15 @@ func (replica *Replica) sync() {
 		reply := parse(func(length int) {
 			replica.addReplOffset(length)
 		})
-		// TODO 处理master返回的数据
-		fmt.Println(reply)
+		arr, ok := reply.([][]byte)
+		if ok {
+			commandName := string(arr[0])
+			if commandName == "REPLCONF" && string(arr[1]) == "GETACK" {
+				replica.startHeartbeat()
+			} else if commandName != "PING" {
+				// TODO 解析返回的命令
+			}
+		}
 	}
 }
 
@@ -87,7 +94,6 @@ func (replica *Replica) startHeartbeat() {
 		for range ticker.C {
 			offset := strconv.Itoa(replica.getReplOffset())
 			send("REPLCONF", "ACK", offset)
-			fmt.Println("heartbeat. curr offset: ", offset)
 		}
 	}()
 	fmt.Println("heartbeat started")

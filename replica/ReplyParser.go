@@ -109,10 +109,13 @@ func parseReply(callback func(length int) interface{}) interface{} {
 			if length == -1 {
 				return nil
 			}
-			array := make([]interface{}, length)
+			array := make([][]byte, length)
 			for i := 0; i < length; i++ {
 				reply := parseReply(handleBulkReply)
-				array[i] = reply
+				typ, ok := reply.([]byte)
+				if ok {
+					array[i] = typ
+				}
 			}
 			return array
 		case '\n':
