@@ -9,20 +9,31 @@ func replyStr() (reply string) {
 	return parseReply(nil).(string)
 }
 
+func handleBulkReply(length int) (resp interface{}) {
+	if length == 0 {
+		return []byte{}
+	}
+	bytes := make([]byte, length)
+	reader.Read(bytes)
+
+	b, _ := reader.ReadByte()
+	if b != Cr {
+		panic("excepted cr but not")
+	}
+	b, _ = reader.ReadByte()
+	if b != Lf {
+		panic("excepted lf but not")
+	}
+	return bytes
+}
+
 func parseDump() {
 	parseReply(parseRdb)
 }
 
 func parse(callback func(length int)) interface{} {
 	reader.Mark()
-	reply := parseReply(func(length int) (resp interface{}) {
-		if length == 0 {
-			return []byte{}
-		}
-		bytes := make([]byte, length)
-		reader.Read(bytes)
-		return bytes
-	})
+	reply := parseReply(handleBulkReply)
 	length := reader.UnMark()
 	callback(length)
 	return reply
@@ -81,7 +92,31 @@ func parseReply(callback func(length int) interface{}) interface{} {
 				}
 			}
 			return callback(size)
+		case Star:
+			var builder strings.Builder
+			for {
+				for byt, e := reader.ReadByte(); byt != Cr && e == nil; {
+					builder.WriteByte(byt)
+					byt, e = reader.ReadByte()
+				}
+				if byt, e := reader.ReadByte(); byt == Lf {
+					break
+				} else if e == nil {
+					builder.WriteByte(byt)
+				}
+			}
+			length, _ := strconv.Atoi(builder.String())
+			if length == -1 {
+				return nil
+			}
+			array := make([]interface{}, length)
+			for i := 0; i < length; i++ {
+				reply := parseReply(handleBulkReply)
+				array[i] = reply
+			}
+			return array
 		case '\n':
+			break
 		default:
 			break
 		}

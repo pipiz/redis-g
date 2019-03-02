@@ -58,11 +58,10 @@ func (replica *Replica) sync() {
 	}
 	for status == "CONNECTED" {
 		reply := parse(func(length int) {
-			// TODO offset与master有差距
 			replica.addReplOffset(length)
-		}).([]byte)
+		})
 		// TODO 处理master返回的数据
-		fmt.Println(string(reply))
+		fmt.Println(reply)
 	}
 }
 

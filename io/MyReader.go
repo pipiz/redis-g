@@ -13,6 +13,9 @@ type MyReader struct {
 func (reader *MyReader) ReadByte() (byte, error) {
 	bytes := make([]byte, 1)
 	_, err := reader.Input.Read(bytes)
+	if reader.marked {
+		reader.markLen += 1
+	}
 	return bytes[0], err
 }
 
