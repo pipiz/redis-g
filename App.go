@@ -5,7 +5,7 @@ import (
 )
 
 func main() {
-	newReplica := replica.Replica{Address: "localhost:6379"}
+	newReplica := replica.Replica{Master: "localhost:6379"}
 	newReplica.Open()
 	newReplica.Close()
 }

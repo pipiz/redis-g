@@ -13,7 +13,7 @@ import (
 )
 
 type Replica struct {
-	Address       string
+	Master        string
 	MasterAuth    string
 	replicaId     string
 	replicaOffset int64
@@ -25,16 +25,10 @@ var reader *io.MyReader
 var writer *bufio.Writer
 
 func (replica *Replica) Open() {
-	connect(replica.Address)
+	connect(replica.Master)
 	if replica.MasterAuth != "" {
 		auth(replica.MasterAuth)
 	}
-	sendPing()
-	addr := strings.Split(connection.LocalAddr().String(), ":")
-	sendSlavePort(addr[1])
-	sendSlaveIp(addr[0])
-	sendSlaveCapa("eof")
-	sendSlaveCapa("psync2")
 	replica.sync()
 }
 
@@ -67,6 +61,11 @@ func (replica *Replica) sync() {
 				replica.startHeartbeat()
 			} else if commandName != "PING" {
 				// TODO 解析返回的命令
+				fmt.Println(commandName)
+				for i := 1; i < len(arr); i++ {
+					fmt.Printf("\t %s", arr[i])
+				}
+				fmt.Print("\n")
 			}
 		}
 	}
@@ -124,44 +123,6 @@ func (replica *Replica) getReplId() (replId string) {
 		replId = "?"
 	}
 	return replId
-}
-
-func sendSlaveCapa(command string) {
-	fmt.Printf("REPLCONF capa %s\n", command)
-	send("REPLCONF", "capa", command)
-	reply := replyStr()
-	fmt.Println(reply)
-	if "OK" == reply {
-		return
-	}
-}
-
-func sendSlaveIp(ip string) {
-	fmt.Printf("REPLCONF ip-address %s\n", ip)
-	send("REPLCONF", "ip-address", ip)
-	reply := replyStr()
-	fmt.Println(reply)
-	if "OK" == reply {
-		return
-	}
-}
-
-func sendSlavePort(port string) {
-	fmt.Printf("REPLCONF listening-port %s\n", port)
-	send("REPLCONF", "listening-port", port)
-	reply := replyStr()
-	fmt.Println(reply)
-	if "OK" == reply {
-		return
-	}
-}
-
-func sendPing() {
-	send("PING")
-	reply := replyStr()
-	if "PONG" == reply {
-		return
-	}
 }
 
 func auth(password string) {
