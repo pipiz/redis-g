@@ -8,25 +8,21 @@ func Decompress(input []byte, inputLength int, output []byte, outputLength int) 
 	var iidx = 0
 	var oidx = 0
 
-	for {
+	for iidx < inputLength {
 		var ctrl = int(input[iidx])
 		iidx++
 
 		if ctrl < (1 << 5) {
 			ctrl++
 
-			if int(oidx+ctrl) > outputLength {
+			if oidx+ctrl > outputLength {
 				return
 			}
 
-			for {
+			for ; ctrl > 0; ctrl-- {
 				output[oidx] = input[iidx]
 				oidx++
 				iidx++
-				ctrl--
-				if ctrl == 0 {
-					break
-				}
 			}
 		} else {
 			var length = ctrl >> 5
@@ -37,10 +33,7 @@ func Decompress(input []byte, inputLength int, output []byte, outputLength int) 
 			}
 			reference -= int(input[iidx])
 			iidx++
-			if int(oidx+length+2) > outputLength {
-				return
-			}
-			if reference < 0 {
+			if oidx+length+2 > outputLength || reference < 0 {
 				return
 			}
 
@@ -51,19 +44,11 @@ func Decompress(input []byte, inputLength int, output []byte, outputLength int) 
 			oidx++
 			reference++
 
-			for {
+			for ; length > 0; length-- {
 				output[oidx] = output[reference]
 				oidx++
 				reference++
-				length--
-				if length == 0 {
-					break
-				}
 			}
-		}
-
-		if !(int(iidx) < inputLength) {
-			break
 		}
 	}
 }
