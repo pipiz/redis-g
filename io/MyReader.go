@@ -2,6 +2,8 @@ package io
 
 import (
 	"bufio"
+	"io"
+	"log"
 )
 
 type MyReader struct {
@@ -11,18 +13,18 @@ type MyReader struct {
 }
 
 func (reader *MyReader) ReadByte() (byte, error) {
-	bytes := make([]byte, 1)
-	_, err := reader.Input.Read(bytes)
+	oneByte, err := reader.Input.ReadByte()
 	if reader.marked {
 		reader.markLen += 1
 	}
-	return bytes[0], err
+	return oneByte, err
 }
 
 func (reader *MyReader) Read(p []byte) (n int, err error) {
-	i, e := reader.Input.Read(p)
+	i, e := io.ReadFull(reader.Input, p)
+	log.Println("len: ", len(p), "实际读取的: ", i)
 	if reader.marked {
-		reader.markLen += len(p)
+		reader.markLen += i
 	}
 	return i, e
 }
