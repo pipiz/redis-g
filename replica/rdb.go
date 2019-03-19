@@ -45,75 +45,75 @@ func parseRdb(size int) interface{} {
 			command := parseSetCommand()
 			commChan <- command
 		case HashZipList:
-			name := readString()
-			fmt.Printf("%s: {\n", string(name))
+			key := readString()
 			bytes := readString()
 			byteReader := bytes2.NewReader(bytes)
-
 			readZlBytes(byteReader)
-
 			readZlTail(byteReader)
 
 			zlLen := readZlLen(byteReader)
-
-			for ; zlLen > 0; zlLen -= 2 {
+			args := make([][]byte, zlLen+1)
+			args[0] = key
+			for index := 1; zlLen > 0; zlLen -= 2 {
 				field := readZipListEntry(byteReader)
 				value := readZipListEntry(byteReader)
-				fmt.Printf("\t%s: %s\n", string(field), string(value))
+				args[index] = field
+				args[index+1] = value
+				index += 2
 			}
-			fmt.Println("}")
+			commChan <- Command{Name: "HSET", Args: args}
 		case ListQuickList:
-			name := readString()
-			fmt.Printf("%s:", string(name))
-
-			fmt.Printf("[ ")
+			key := readString()
 			count := readLength()
+			args := make([][]byte, 1)
+			args[0] = key
 			for i := 0; i < count.val; i++ {
-				bytes = readString()
-				byteReader := bytes2.NewReader(bytes)
-
+				element := readString()
+				byteReader := bytes2.NewReader(element)
 				readZlBytes(byteReader)
-
 				readZlTail(byteReader)
 
 				zlLen := readZlLen(byteReader)
 				for ; zlLen > 0; zlLen-- {
-					field := readZipListEntry(byteReader)
-					fmt.Printf("%s ", string(field))
+					element := readZipListEntry(byteReader)
+					args = append(args, element)
 				}
 			}
-			fmt.Printf("]\n")
+			commChan <- Command{Name: "RPUSH", Args: args}
 		case Set, List:
-			name := readString()
-			fmt.Printf("%s:", string(name))
+			key := readString()
 
-			fmt.Printf("[ ")
 			count := readLength()
-			for i := 0; i < count.val; i++ {
-				bytes = readString()
-				fmt.Printf("%s ", string(bytes))
+			args := make([][]byte, count.val+1)
+			args[0] = key
+			for i := 1; i <= count.val; i++ {
+				element := readString()
+				args[i] = element
 			}
-			fmt.Printf("]\n")
+			commandName := "SADD"
+			if _type == List {
+				commandName = "RPUSH"
+			}
+			commChan <- Command{Args: args, Name: commandName}
 		case ZsetZipList:
-			name := readString()
-			fmt.Printf("%s:", string(name))
+			key := readString()
 
 			bytes := readString()
 			byteReader := bytes2.NewReader(bytes)
-
 			readZlBytes(byteReader)
-
 			readZlTail(byteReader)
 
 			zlLen := readZlLen(byteReader)
-
-			fmt.Printf("{\n")
-			for ; zlLen > 0; zlLen -= 2 {
-				field := readZipListEntry(byteReader)
+			args := make([][]byte, zlLen+1)
+			args[0] = key
+			for index := 1; zlLen > 0; zlLen -= 2 {
+				element := readZipListEntry(byteReader)
 				score := readZipListEntry(byteReader)
-				fmt.Printf("\t%s %s\n", string(field), string(score))
+				args[index] = score
+				args[index+1] = element
+				index += 2
 			}
-			fmt.Print("}\n")
+			commChan <- Command{Name: "ZADD", Args: args}
 		case Eof:
 			if version >= 5 {
 				checksum := readInteger(8, true)
