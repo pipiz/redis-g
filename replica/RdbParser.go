@@ -241,21 +241,25 @@ func readLength() Length {
 
 	b, _ := reader.ReadByte()
 
-	switch (b & 0xC0) >> 6 { // 取高二位
-	case 0: // 00, 余下6位表示长度
+	var rawByte = int(b & 0xff)
+
+	_type := (rawByte & 0xC0) >> 6
+
+	if _type == 3 {
 		length = int(b & 0x3F)
-	case 1: // 01, 再读一字节, 组合14位表示长度
+		special = true
+	} else if _type == 0 {
+		length = int(b & 0x3F)
+	} else if _type == 1 {
 		nextByte, _ := reader.ReadByte()
 		i := ((int16(b) & 0x3F) << 8) | int16(nextByte)
 		length = int(i)
-	case 3: // 11, 特殊格式
-		length = int(b & 0x3F)
-		special = true
-	case 0x80: // 再读4字节，表示长度
+	} else if rawByte == 0x80 {
 		length = readInteger(4, true)
-	case 0x81: // 再读8字节，表示长度
+	} else if rawByte == 0x81 {
 		length = readInteger(8, true)
 	}
+
 	return Length{length, special}
 }
 
