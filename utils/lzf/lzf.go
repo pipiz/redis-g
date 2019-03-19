@@ -1,4 +1,4 @@
-package util
+package lzf
 
 /*
 lzf算法解压缩

@@ -4,7 +4,9 @@ import (
 	bytes2 "bytes"
 	"encoding/binary"
 	"fmt"
-	"redis-g/util"
+	. "redis-g/command"
+	"redis-g/utils/lzf"
+	. "redis-g/utils/numbers"
 	"strconv"
 )
 
@@ -40,7 +42,8 @@ func parseRdb(size int) interface{} {
 			fmt.Println("db total keys:", len1.val)
 			fmt.Println("db expired keys:", len2.val)
 		case String:
-			fmt.Printf("%s: %s\n", string(readString()), string(readString()))
+			command := parseSetCommand()
+			commChan <- command
 		case HashZipList:
 			name := readString()
 			fmt.Printf("%s: {\n", string(name))
@@ -122,6 +125,16 @@ func parseRdb(size int) interface{} {
 	return "OK"
 }
 
+func parseSetCommand() Command {
+	key := readString()
+	value := readString()
+	args := make([][]byte, 2)
+	args[0] = key
+	args[1] = value
+	command := Command{Name: "SET", Args: args}
+	return command
+}
+
 func readZlLen(byteReader *bytes2.Reader) uint16 {
 	bytes := make([]byte, 2)
 	byteReader.Read(bytes)
@@ -181,24 +194,24 @@ func readZipListEntry(byteReader *bytes2.Reader) []byte {
 	case ZipInt16Bit: // little endian
 		bytes := make([]byte, 2)
 		byteReader.Read(bytes)
-		u := util.ToInt16(bytes, false)
+		u := ToInt16(bytes, false)
 		return []byte(strconv.Itoa(int(u)))
 	case ZipInt24Bit: // little endian
 		bytes := make([]byte, 4)
 		bytes[0], _ = byteReader.ReadByte()
 		bytes[1], _ = byteReader.ReadByte()
 		bytes[2], _ = byteReader.ReadByte()
-		u := util.ToInt32(bytes, false)
+		u := ToInt32(bytes, false)
 		return []byte(strconv.Itoa(int(u)))
 	case ZipInt32Bit: // little endian
 		bytes := make([]byte, 4)
 		byteReader.Read(bytes)
-		u := util.ToInt32(bytes, false)
+		u := ToInt32(bytes, false)
 		return []byte(strconv.Itoa(int(u)))
 	case ZipInt64Bit: // little endian
 		bytes := make([]byte, 8)
 		byteReader.Read(bytes)
-		u := util.ToInt64(bytes, false)
+		u := ToInt64(bytes, false)
 		return []byte(strconv.Itoa(int(u)))
 	default:
 		result := specialFlag - 0xF1
@@ -226,7 +239,7 @@ func readString() []byte {
 			bytes := make([]byte, clenth.val)
 			reader.Read(bytes)
 			out := make([]byte, length.val)
-			util.Decompress(bytes, clenth.val, out, length.val)
+			lzf.Decompress(bytes, clenth.val, out, length.val)
 			return out
 		}
 	}
@@ -267,11 +280,11 @@ func readInteger(size int, isBigEndian bool) int {
 	bytes := make([]byte, size)
 	reader.Read(bytes)
 	if size == 2 {
-		return int(util.ToInt16(bytes, isBigEndian))
+		return int(ToInt16(bytes, isBigEndian))
 	} else if size == 4 {
-		return int(util.ToInt32(bytes, isBigEndian))
+		return int(ToInt32(bytes, isBigEndian))
 	} else if size == 8 {
-		return int(util.ToInt64(bytes, isBigEndian))
+		return int(ToInt64(bytes, isBigEndian))
 	}
 	return -1
 }

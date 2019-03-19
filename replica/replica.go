@@ -4,8 +4,9 @@ import (
 	"bufio"
 	"fmt"
 	"net"
+	. "redis-g/command"
 	"redis-g/io"
-	"redis-g/util"
+	. "redis-g/utils/numbers"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -39,6 +40,7 @@ func (replica *Replica) Close() {
 }
 
 func (replica *Replica) sync() {
+	go handleCommand()
 	fmt.Printf("PSYNC %s %d\n", replica.getReplId(), replica.getReplOffset())
 	send("PSYNC", replica.getReplId(), strconv.Itoa(replica.getReplOffset()))
 	reply := replyStr()
@@ -60,12 +62,7 @@ func (replica *Replica) sync() {
 			if commandName == "REPLCONF" && string(arr[1]) == "GETACK" {
 				replica.startHeartbeat()
 			} else if commandName != "PING" {
-				// TODO 解析返回的命令
-				fmt.Println(commandName)
-				for i := 1; i < len(arr); i++ {
-					fmt.Printf("\t %s", arr[i])
-				}
-				fmt.Print("\n")
+				commChan <- Command{Name: commandName, Args: arr[1:]}
 			}
 		}
 	}
@@ -133,11 +130,11 @@ func send(command string, args ...string) {
 	commLen := len(command)
 	argsLen := len(args)
 	writer.WriteByte(Star)
-	writer.Write(util.ToBytes(argsLen + 1))
+	writer.Write(ToBytes(argsLen + 1))
 	writer.WriteByte(Cr)
 	writer.WriteByte(Lf)
 	writer.WriteByte(Dollar)
-	writer.Write(util.ToBytes(commLen))
+	writer.Write(ToBytes(commLen))
 	writer.WriteByte(Cr)
 	writer.WriteByte(Lf)
 	writer.WriteString(command)
@@ -146,7 +143,7 @@ func send(command string, args ...string) {
 	for i := 0; i < argsLen; i++ {
 		argLen := len(args[i])
 		writer.WriteByte(Dollar)
-		writer.Write(util.ToBytes(argLen))
+		writer.Write(ToBytes(argLen))
 		writer.WriteByte(Cr)
 		writer.WriteByte(Lf)
 		writer.WriteString(args[i])
