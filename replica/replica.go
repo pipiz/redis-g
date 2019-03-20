@@ -43,6 +43,7 @@ var (
 
 func (replica *replica) Open() {
 	replica.connectMaster()
+	replica.sendMetadata()
 	replica.connectTargetRedis()
 	replica.sync()
 }
@@ -169,19 +170,30 @@ func send(command string, args ...string) {
 }
 
 func (replica *replica) connectMaster() {
+	logger.Println("Connecting", replica.Master)
 	conn, err := net.Dial("tcp4", replica.Master)
 	if err != nil {
-		panic(err)
+		logger.Fatalln("Connection failed:", err.Error())
 	}
 	writer = bufio.NewWriter(conn)
 	reader = &io.Reader{Input: bufio.NewReader(conn)}
-	if replica.MasterAuth != "" {
-		send("AUTH", replica.MasterAuth)
-		reply := replyStr()
-		if "OK" != reply {
-			panic(reply)
+
+	// 检查是否需要认证
+	send("PING")
+	reply := replyStr()
+	if strings.HasPrefix(reply, "NOAUTH") {
+		if replica.MasterAuth != "" {
+			send("AUTH", replica.MasterAuth)
+			reply := replyStr()
+			if "OK" != reply {
+				logger.Fatalln(reply)
+			}
+		} else {
+			panic("请通过参数提供主Redis的密码信息")
 		}
 	}
+
+	logger.Println("Connected")
 	master = conn
 	status = "CONNECTED"
 }
@@ -196,6 +208,15 @@ func (replica *replica) connectTargetRedis() {
 	target, err = redis.Dial("tcp4", replica.Target, dialOptions...)
 	if err != nil {
 		panic(err)
+	}
+}
+func (replica *replica) sendMetadata() {
+	addr := strings.Split(master.LocalAddr().String(), ":")
+	logger.Println("REPLCONF listening-port:", addr[1])
+	send("REPLCONF", "listening-port", addr[1])
+	reply := replyStr()
+	if "OK" != reply {
+		logger.Panic(reply)
 	}
 }
 
