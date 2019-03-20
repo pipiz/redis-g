@@ -4,20 +4,20 @@ import (
 	bytes2 "bytes"
 	"encoding/binary"
 	"fmt"
-	. "redis-g/command"
+	"redis-g/command"
 	"redis-g/utils/lzf"
-	. "redis-g/utils/numbers"
+	"redis-g/utils/numbers"
 	"strconv"
 )
 
-type Length struct {
+type length struct {
 	val     int
 	special bool
 }
 
 func parseRdb(size int) interface{} {
 	if size != -1 {
-		fmt.Printf("RDB size: %d byte\n", size)
+		logger.Printf("RDB size: %d byte\n", size)
 	}
 	bytes := make([]byte, 5)
 	reader.Read(bytes)
@@ -27,7 +27,7 @@ func parseRdb(size int) interface{} {
 	if version < 2 || version > 9 {
 		panic(fmt.Sprintf("can't handle RDB format version %d", version))
 	}
-	fmt.Println("RDB version:", version)
+	logger.Println("RDB version:", version)
 	for {
 		_type, _ := reader.ReadByte()
 		switch _type {
@@ -35,15 +35,14 @@ func parseRdb(size int) interface{} {
 			parseAUX()
 		case DbSelector:
 			length := readLength()
-			fmt.Println("db:", length.val)
+			logger.Println("db:", length.val)
 		case DbResize:
 			len1 := readLength()
 			len2 := readLength()
-			fmt.Println("db total keys:", len1.val)
-			fmt.Println("db expired keys:", len2.val)
+			logger.Println("db total keys:", len1.val)
+			logger.Println("db expired keys:", len2.val)
 		case String:
-			command := parseSetCommand()
-			commChan <- command
+			commChan <- parseSetCommand()
 		case HashZipList:
 			key := readString()
 			bytes := readString()
@@ -61,7 +60,7 @@ func parseRdb(size int) interface{} {
 				args[index+1] = value
 				index += 2
 			}
-			commChan <- Command{Name: "HSET", Args: args}
+			commChan <- command.New("HSET", args)
 		case ListQuickList:
 			key := readString()
 			count := readLength()
@@ -79,7 +78,7 @@ func parseRdb(size int) interface{} {
 					args = append(args, element)
 				}
 			}
-			commChan <- Command{Name: "RPUSH", Args: args}
+			commChan <- command.New("RPUSH", args)
 		case Set, List:
 			key := readString()
 
@@ -94,7 +93,7 @@ func parseRdb(size int) interface{} {
 			if _type == List {
 				commandName = "RPUSH"
 			}
-			commChan <- Command{Args: args, Name: commandName}
+			commChan <- command.New(commandName, args)
 		case ZsetZipList:
 			key := readString()
 
@@ -113,11 +112,11 @@ func parseRdb(size int) interface{} {
 				args[index+1] = element
 				index += 2
 			}
-			commChan <- Command{Name: "ZADD", Args: args}
+			commChan <- command.New("ZADD", args)
 		case Eof:
 			if version >= 5 {
 				checksum := readInteger(8, true)
-				fmt.Println("checksum ", checksum)
+				logger.Println("checksum ", checksum)
 			}
 			return "OK"
 		}
@@ -125,14 +124,13 @@ func parseRdb(size int) interface{} {
 	return "OK"
 }
 
-func parseSetCommand() Command {
+func parseSetCommand() command.Command {
 	key := readString()
 	value := readString()
 	args := make([][]byte, 2)
 	args[0] = key
 	args[1] = value
-	command := Command{Name: "SET", Args: args}
-	return command
+	return command.New("SET", args)
 }
 
 func readZlLen(byteReader *bytes2.Reader) uint16 {
@@ -153,7 +151,7 @@ func readZlTail(byteReader *bytes2.Reader) {
 }
 
 func parseAUX() {
-	fmt.Printf("%s: %s\n", string(readString()), string(readString()))
+	logger.Printf("%s: %s\n", string(readString()), string(readString()))
 }
 
 func readZipListEntry(byteReader *bytes2.Reader) []byte {
@@ -194,24 +192,24 @@ func readZipListEntry(byteReader *bytes2.Reader) []byte {
 	case ZipInt16Bit: // little endian
 		bytes := make([]byte, 2)
 		byteReader.Read(bytes)
-		u := ToInt16(bytes, false)
+		u := numbers.ToInt16(bytes, false)
 		return []byte(strconv.Itoa(int(u)))
 	case ZipInt24Bit: // little endian
 		bytes := make([]byte, 4)
 		bytes[0], _ = byteReader.ReadByte()
 		bytes[1], _ = byteReader.ReadByte()
 		bytes[2], _ = byteReader.ReadByte()
-		u := ToInt32(bytes, false)
+		u := numbers.ToInt32(bytes, false)
 		return []byte(strconv.Itoa(int(u)))
 	case ZipInt32Bit: // little endian
 		bytes := make([]byte, 4)
 		byteReader.Read(bytes)
-		u := ToInt32(bytes, false)
+		u := numbers.ToInt32(bytes, false)
 		return []byte(strconv.Itoa(int(u)))
 	case ZipInt64Bit: // little endian
 		bytes := make([]byte, 8)
 		byteReader.Read(bytes)
-		u := ToInt64(bytes, false)
+		u := numbers.ToInt64(bytes, false)
 		return []byte(strconv.Itoa(int(u)))
 	default:
 		result := specialFlag - 0xF1
@@ -248,8 +246,8 @@ func readString() []byte {
 	return bytes
 }
 
-func readLength() Length {
-	var length int
+func readLength() length {
+	var _length int
 	var special bool
 
 	b, _ := reader.ReadByte()
@@ -259,32 +257,32 @@ func readLength() Length {
 	_type := (rawByte & 0xC0) >> 6
 
 	if _type == 3 {
-		length = int(b & 0x3F)
+		_length = int(b & 0x3F)
 		special = true
 	} else if _type == 0 {
-		length = int(b & 0x3F)
+		_length = int(b & 0x3F)
 	} else if _type == 1 {
 		nextByte, _ := reader.ReadByte()
 		i := ((int16(b) & 0x3F) << 8) | int16(nextByte)
-		length = int(i)
+		_length = int(i)
 	} else if rawByte == 0x80 {
-		length = readInteger(4, true)
+		_length = readInteger(4, true)
 	} else if rawByte == 0x81 {
-		length = readInteger(8, true)
+		_length = readInteger(8, true)
 	}
 
-	return Length{length, special}
+	return length{_length, special}
 }
 
 func readInteger(size int, isBigEndian bool) int {
 	bytes := make([]byte, size)
 	reader.Read(bytes)
 	if size == 2 {
-		return int(ToInt16(bytes, isBigEndian))
+		return int(numbers.ToInt16(bytes, isBigEndian))
 	} else if size == 4 {
-		return int(ToInt32(bytes, isBigEndian))
+		return int(numbers.ToInt32(bytes, isBigEndian))
 	} else if size == 8 {
-		return int(ToInt64(bytes, isBigEndian))
+		return int(numbers.ToInt64(bytes, isBigEndian))
 	}
 	return -1
 }

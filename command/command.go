@@ -1,13 +1,23 @@
 package command
 
+import "strings"
+
 type Command struct {
-	Name string
-	Args [][]byte
+	name string
+	args [][]byte
 }
 
-func (command Command) GetArgs() []interface{} {
-	args := make([]interface{}, len(command.Args))
-	for i, arg := range command.Args {
+func New(name string, args [][]byte) Command {
+	return Command{strings.ToUpper(name), args}
+}
+
+func (command Command) Name() string {
+	return command.name
+}
+
+func (command Command) Args() []interface{} {
+	args := make([]interface{}, len(command.args))
+	for i, arg := range command.args {
 		args[i] = arg
 	}
 	return args

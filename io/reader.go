@@ -5,13 +5,13 @@ import (
 	"io"
 )
 
-type MyReader struct {
+type Reader struct {
 	Input   *bufio.Reader
 	markLen int
 	marked  bool
 }
 
-func (reader *MyReader) ReadByte() (byte, error) {
+func (reader *Reader) ReadByte() (byte, error) {
 	oneByte, err := reader.Input.ReadByte()
 	if reader.marked {
 		reader.markLen += 1
@@ -19,7 +19,7 @@ func (reader *MyReader) ReadByte() (byte, error) {
 	return oneByte, err
 }
 
-func (reader *MyReader) Read(p []byte) (n int, err error) {
+func (reader *Reader) Read(p []byte) (n int, err error) {
 	i, e := io.ReadFull(reader.Input, p)
 	if reader.marked {
 		reader.markLen += i
@@ -27,13 +27,13 @@ func (reader *MyReader) Read(p []byte) (n int, err error) {
 	return i, e
 }
 
-func (reader *MyReader) Mark() {
+func (reader *Reader) Mark() {
 	if !reader.marked {
 		reader.marked = true
 	}
 }
 
-func (reader *MyReader) UnMark() (rs int) {
+func (reader *Reader) UnMark() (rs int) {
 	if reader.marked {
 		rs = reader.markLen
 		reader.markLen = 0

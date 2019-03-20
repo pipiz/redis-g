@@ -2,49 +2,68 @@ package replica
 
 import (
 	"bufio"
-	"fmt"
+	"github.com/gomodule/redigo/redis"
+	"log"
 	"net"
-	. "redis-g/command"
+	"os"
+	"redis-g/command"
 	"redis-g/io"
-	. "redis-g/utils/numbers"
+	"redis-g/utils/numbers"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
 )
 
-type Replica struct {
+type replica struct {
 	Master        string
 	MasterAuth    string
+	Target        string
+	Auth          string
 	replicaId     string
 	replicaOffset int64
 }
 
-var status string
-var connection net.Conn
-var reader *io.MyReader
-var writer *bufio.Writer
-
-func (replica *Replica) Open() {
-	connect(replica.Master)
-	if replica.MasterAuth != "" {
-		auth(replica.MasterAuth)
+func New(master string, masterAuth string, target string, auth string) *replica {
+	if master == "" {
+		return nil
 	}
+	return &replica{Master: master, MasterAuth: masterAuth, Target: target, Auth: auth}
+}
+
+var (
+	status   string
+	master   net.Conn
+	reader   *io.Reader
+	writer   *bufio.Writer
+	target   redis.Conn
+	commChan = make(chan command.Command, 65535)
+	logger   = log.New(os.Stdout, "", log.LstdFlags)
+)
+
+func (replica *replica) Open() {
+	replica.connectMaster()
+	replica.connectTargetRedis()
 	replica.sync()
 }
 
-func (replica *Replica) Close() {
-	if connection != nil {
-		connection.Close()
+func (replica *replica) Close() {
+	if master != nil {
+		e := master.Close()
+		logger.Println(e)
+	}
+	if target != nil {
+		e := target.Close()
+		logger.Println(e)
 	}
 }
 
-func (replica *Replica) sync() {
+func (replica *replica) sync() {
 	go handleCommand()
-	fmt.Printf("PSYNC %s %d\n", replica.getReplId(), replica.getReplOffset())
+	logger.Printf("PSYNC %s %d\n", replica.getReplId(), replica.getReplOffset())
 	send("PSYNC", replica.getReplId(), strconv.Itoa(replica.getReplOffset()))
 	reply := replyStr()
-	fmt.Println(reply)
+	logger.Println(reply)
 	mode := replica.trySync(reply)
 	switch mode {
 	case "PSYNC":
@@ -62,13 +81,13 @@ func (replica *Replica) sync() {
 			if commandName == "REPLCONF" && string(arr[1]) == "GETACK" {
 				replica.startHeartbeat()
 			} else if commandName != "PING" {
-				commChan <- Command{Name: commandName, Args: arr[1:]}
+				commChan <- command.New(commandName, arr[1:])
 			}
 		}
 	}
 }
 
-func (replica *Replica) trySync(reply string) (mode string) {
+func (replica *replica) trySync(reply string) (mode string) {
 	if strings.HasPrefix(reply, "FULLRESYNC") {
 		parseDump()
 		resp := strings.Split(reply, " ")
@@ -84,7 +103,7 @@ func (replica *Replica) trySync(reply string) (mode string) {
 	return mode
 }
 
-func (replica *Replica) startHeartbeat() {
+func (replica *replica) startHeartbeat() {
 	ticker := time.NewTicker(time.Second)
 	go func() {
 		for range ticker.C {
@@ -92,18 +111,18 @@ func (replica *Replica) startHeartbeat() {
 			send("REPLCONF", "ACK", offset)
 		}
 	}()
-	fmt.Println("heartbeat started")
+	logger.Println("heartbeat started")
 }
 
-func (replica *Replica) addReplOffset(length int) {
+func (replica *replica) addReplOffset(length int) {
 	atomic.AddInt64(&replica.replicaOffset, int64(length))
 }
 
-func (replica *Replica) setReplOffset(offset int) {
+func (replica *replica) setReplOffset(offset int) {
 	atomic.StoreInt64(&replica.replicaOffset, int64(offset))
 }
 
-func (replica *Replica) getReplOffset() int {
+func (replica *replica) getReplOffset() int {
 	offset := atomic.LoadInt64(&replica.replicaOffset)
 	if offset == 0 {
 		return -1
@@ -111,30 +130,26 @@ func (replica *Replica) getReplOffset() int {
 	return int(offset)
 }
 
-func (replica *Replica) setReplId(replId string) {
+func (replica *replica) setReplId(replId string) {
 	replica.replicaId = replId
 }
 
-func (replica *Replica) getReplId() (replId string) {
+func (replica *replica) getReplId() (replId string) {
 	if replica.replicaId == "" {
 		replId = "?"
 	}
 	return replId
 }
 
-func auth(password string) {
-	send("AUTH", password)
-}
-
 func send(command string, args ...string) {
 	commLen := len(command)
 	argsLen := len(args)
 	writer.WriteByte(Star)
-	writer.Write(ToBytes(argsLen + 1))
+	writer.Write(numbers.ToBytes(argsLen + 1))
 	writer.WriteByte(Cr)
 	writer.WriteByte(Lf)
 	writer.WriteByte(Dollar)
-	writer.Write(ToBytes(commLen))
+	writer.Write(numbers.ToBytes(commLen))
 	writer.WriteByte(Cr)
 	writer.WriteByte(Lf)
 	writer.WriteString(command)
@@ -143,7 +158,7 @@ func send(command string, args ...string) {
 	for i := 0; i < argsLen; i++ {
 		argLen := len(args[i])
 		writer.WriteByte(Dollar)
-		writer.Write(ToBytes(argLen))
+		writer.Write(numbers.ToBytes(argLen))
 		writer.WriteByte(Cr)
 		writer.WriteByte(Lf)
 		writer.WriteString(args[i])
@@ -153,13 +168,40 @@ func send(command string, args ...string) {
 	writer.Flush()
 }
 
-func connect(address string) {
-	conn, e := net.Dial("tcp4", address)
-	if e != nil {
-		panic(e)
+func (replica *replica) connectMaster() {
+	conn, err := net.Dial("tcp4", replica.Master)
+	if err != nil {
+		panic(err)
 	}
-	connection = conn
 	writer = bufio.NewWriter(conn)
-	reader = &io.MyReader{Input: bufio.NewReader(conn)}
+	reader = &io.Reader{Input: bufio.NewReader(conn)}
+	if replica.MasterAuth != "" {
+		send("AUTH", replica.MasterAuth)
+		reply := replyStr()
+		if "OK" != reply {
+			panic(reply)
+		}
+	}
+	master = conn
 	status = "CONNECTED"
+}
+
+func (replica *replica) connectTargetRedis() {
+	dialOptions := make([]redis.DialOption, 0)
+	if replica.Auth != "" {
+		password := redis.DialPassword(replica.Auth)
+		dialOptions = append(dialOptions, password)
+	}
+	var err error
+	target, err = redis.Dial("tcp4", replica.Target, dialOptions...)
+	if err != nil {
+		panic(err)
+	}
+}
+
+func handleCommand() {
+	for {
+		theCommand := <-commChan
+		target.Do(theCommand.Name(), theCommand.Args()...)
+	}
 }
