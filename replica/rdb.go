@@ -94,7 +94,7 @@ func parseRdb(size int) interface{} {
 				commandName = "RPUSH"
 			}
 			commChan <- command.New(commandName, args)
-		case ZsetZipList:
+		case ZSetZipList:
 			key := readString()
 
 			bytes := readString()

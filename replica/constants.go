@@ -9,16 +9,26 @@ const (
 	Minus  = '-'
 	Colon  = ':'
 
-	Aux           = 0xFA
-	DbSelector    = 0xFE
-	DbResize      = 0xFB
-	String        = 0
-	Eof           = 0xFF
-	HashZipList   = 13
-	ListQuickList = 14
-	Set           = 2
-	List          = 1
-	ZsetZipList   = 12
+	Aux        = 0xFA
+	DbSelector = 0xFE
+	DbResize   = 0xFB
+	Eof        = 0xFF
+
+	String          = 0
+	List            = 1
+	Set             = 2
+	ZSet            = 3
+	Hash            = 4
+	ZSet2           = 5
+	Module          = 6
+	Module2         = 7
+	HashZipMap      = 9
+	ListZipList     = 10
+	SetIntSet       = 11
+	ZSetZipList     = 12
+	HashZipList     = 13
+	ListQuickList   = 14
+	StreamListPacks = 15
 
 	ZipInt8Bit  = 0xFE // 11111110
 	ZipInt16Bit = 0xC0 // 11000000
