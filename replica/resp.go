@@ -118,6 +118,9 @@ func parseReply(callback func(length int) interface{}) interface{} {
 				}
 			}
 			return array
+		case Colon:
+			// TODO
+			panic("Colon: not implement")
 		case '\n':
 			break
 		default:

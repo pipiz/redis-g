@@ -16,24 +16,24 @@ import (
 )
 
 type replica struct {
-	Master        string
-	MasterAuth    string
+	Source        string
+	SourceAuth    string
 	Target        string
-	Auth          string
+	TargetAuth    string
 	replicaId     string
 	replicaOffset int64
 }
 
-func New(master string, masterAuth string, target string, auth string) *replica {
-	if master == "" {
+func New(source string, sourceAuth string, target string, targetAuth string) *replica {
+	if source == "" || target == "" {
 		return nil
 	}
-	return &replica{Master: master, MasterAuth: masterAuth, Target: target, Auth: auth}
+	return &replica{Source: source, SourceAuth: sourceAuth, Target: target, TargetAuth: targetAuth}
 }
 
 var (
 	status   string
-	master   net.Conn
+	source   net.Conn
 	reader   *io.Reader
 	writer   *bufio.Writer
 	target   redis.Conn
@@ -42,21 +42,22 @@ var (
 )
 
 func (replica *replica) Open() {
-	replica.connectMaster()
+	replica.connectSource()
 	replica.sendMetadata()
-	replica.connectTargetRedis()
+	replica.connectTarget()
 	replica.sync()
 }
 
 func (replica *replica) Close() {
-	if master != nil {
-		e := master.Close()
+	if source != nil {
+		e := source.Close()
 		logger.Println(e)
 	}
 	if target != nil {
 		e := target.Close()
 		logger.Println(e)
 	}
+	close(commChan)
 }
 
 func (replica *replica) sync() {
@@ -169,9 +170,9 @@ func send(command string, args ...string) {
 	writer.Flush()
 }
 
-func (replica *replica) connectMaster() {
-	logger.Println("Connecting", replica.Master)
-	conn, err := net.Dial("tcp4", replica.Master)
+func (replica *replica) connectSource() {
+	logger.Println("Connecting", replica.Source)
+	conn, err := net.Dial("tcp4", replica.Source)
 	if err != nil {
 		logger.Fatalln("Connection failed:", err.Error())
 	}
@@ -182,8 +183,8 @@ func (replica *replica) connectMaster() {
 	send("PING")
 	reply := replyStr()
 	if strings.HasPrefix(reply, "NOAUTH") {
-		if replica.MasterAuth != "" {
-			send("AUTH", replica.MasterAuth)
+		if replica.SourceAuth != "" {
+			send("AUTH", replica.SourceAuth)
 			reply := replyStr()
 			if "OK" != reply {
 				logger.Fatalln(reply)
@@ -194,14 +195,14 @@ func (replica *replica) connectMaster() {
 	}
 
 	logger.Println("Connected")
-	master = conn
+	source = conn
 	status = "CONNECTED"
 }
 
-func (replica *replica) connectTargetRedis() {
+func (replica *replica) connectTarget() {
 	dialOptions := make([]redis.DialOption, 0)
-	if replica.Auth != "" {
-		password := redis.DialPassword(replica.Auth)
+	if replica.TargetAuth != "" {
+		password := redis.DialPassword(replica.TargetAuth)
 		dialOptions = append(dialOptions, password)
 	}
 	var err error
@@ -210,8 +211,9 @@ func (replica *replica) connectTargetRedis() {
 		panic(err)
 	}
 }
+
 func (replica *replica) sendMetadata() {
-	addr := strings.Split(master.LocalAddr().String(), ":")
+	addr := strings.Split(source.LocalAddr().String(), ":")
 	logger.Println("REPLCONF listening-port:", addr[1])
 	send("REPLCONF", "listening-port", addr[1])
 	reply := replyStr()

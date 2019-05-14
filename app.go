@@ -1,45 +1,25 @@
 package main
 
 import (
-	"flag"
+	"gopkg.in/alecthomas/kingpin.v2"
+	"os"
 	"redis-g/replica"
 )
 
 var (
-	masterAddress string
-	masterAuth    string
-	targetAddress string
-	targetAuth    string
+	app        = kingpin.New("redis-g", "本程序实现了Redis Replication协议, 在运行时本程序将以'slave'的身份连接至源Redis并请求源Redis的数据, 随后来自源Redis的数据经由本程序存入目标Redis内.")
+	source     = app.Flag("source", "源Redis的地址, 数据的来源.").PlaceHolder("host:port").Required().Short('s').String()
+	sourceAuth = app.Flag("source-auth", "源Redis的密码").PlaceHolder("password").String()
+	target     = app.Flag("target", "目标Redis的地址, 数据最终将存入此Redis").PlaceHolder("host:port").Required().Short('t').String()
+	targetAuth = app.Flag("target-auth", "目标Redis的密码").PlaceHolder("password").String()
 )
 
-func init() {
-	const (
-		defaultSourceAddress  = "localhost:6379"
-		sourceDescription     = "数据源Redis的地址\n程序将从这个节点接收数据并发送至目标Redis"
-		sourceAuthDescription = "数据源Redis的密码"
-		targetDescription     = "目标Redis的地址\n数据将数据发送至此Redis"
-		targetAuthDescription = "目标Redis的密码"
-	)
-
-	flag.StringVar(&masterAddress, "source", defaultSourceAddress, sourceDescription)
-	flag.StringVar(&masterAddress, "s", defaultSourceAddress, sourceDescription)
-	flag.StringVar(&masterAuth, "source-auth", "", sourceAuthDescription)
-	flag.StringVar(&masterAuth, "sa", "", sourceAuthDescription)
-	flag.StringVar(&targetAddress, "target", "", targetDescription)
-	flag.StringVar(&targetAddress, "t", "", targetDescription)
-	flag.StringVar(&targetAuth, "auth", "", targetAuthDescription)
-	flag.StringVar(&targetAuth, "a", "", targetAuthDescription)
-}
-
 func main() {
-	flag.Parse()
-
-	if "" == targetAddress {
-		flag.PrintDefaults()
-		return
+	if _, err := app.Parse(os.Args[1:]); err != nil {
+		app.FatalUsage("%s \r\n", err.Error())
 	}
 
-	instance := replica.New(masterAddress, masterAuth, targetAddress, targetAuth)
+	instance := replica.New(*source, *sourceAuth, *target, *targetAuth)
 	instance.Open()
 	instance.Close()
 }

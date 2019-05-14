@@ -10,11 +10,6 @@ import (
 	"strconv"
 )
 
-type length struct {
-	val     int
-	special bool
-}
-
 func parseRdb(size int) interface{} {
 	if size != -1 {
 		logger.Printf("RDB size: %d byte\n", size)
@@ -34,13 +29,13 @@ func parseRdb(size int) interface{} {
 		case Aux:
 			parseAUX()
 		case DbSelector:
-			length := readLength()
-			logger.Println("db:", length.val)
+			length, _ := readLength()
+			logger.Println("db:", length)
 		case DbResize:
-			len1 := readLength()
-			len2 := readLength()
-			logger.Println("db total keys:", len1.val)
-			logger.Println("db expired keys:", len2.val)
+			len1, _ := readLength()
+			len2, _ := readLength()
+			logger.Println("db total keys:", len1)
+			logger.Println("db expired keys:", len2)
 		case String:
 			commChan <- parseSetCommand()
 		case HashZipList:
@@ -63,10 +58,10 @@ func parseRdb(size int) interface{} {
 			commChan <- command.New("HSET", args)
 		case ListQuickList:
 			key := readString()
-			count := readLength()
+			count, _ := readLength()
 			args := make([][]byte, 1)
 			args[0] = key
-			for i := 0; i < count.val; i++ {
+			for i := 0; i < count; i++ {
 				element := readString()
 				byteReader := bytes2.NewReader(element)
 				readZlBytes(byteReader)
@@ -82,10 +77,10 @@ func parseRdb(size int) interface{} {
 		case Set, List:
 			key := readString()
 
-			count := readLength()
-			args := make([][]byte, count.val+1)
+			count, _ := readLength()
+			args := make([][]byte, count+1)
 			args[0] = key
-			for i := 1; i <= count.val; i++ {
+			for i := 1; i <= count; i++ {
 				element := readString()
 				args[i] = element
 			}
@@ -113,6 +108,33 @@ func parseRdb(size int) interface{} {
 				index += 2
 			}
 			commChan <- command.New("ZADD", args)
+		case ZSet:
+			// TODO
+			panic("ZSet: not implement")
+		case Hash:
+			// TODO
+			panic("Hash: not implement")
+		case ZSet2:
+			// TODO
+			panic("ZSet2: not implement")
+		case Module:
+			// TODO
+			panic("Module: not implement")
+		case Module2:
+			// TODO
+			panic("Module2: not implement")
+		case HashZipMap:
+			// TODO
+			panic("HashZipMap: not implement")
+		case ListZipList:
+			// TODO
+			panic("ListZipList: not implement")
+		case SetIntSet:
+			// TODO
+			panic("SetIntSet: not implement")
+		case StreamListPacks:
+			// TODO
+			panic("StreamListPacks: not implement")
 		case Eof:
 			if version >= 5 {
 				checksum := readInteger(8, true)
@@ -219,9 +241,9 @@ func readZipListEntry(byteReader *bytes2.Reader) []byte {
 }
 
 func readString() []byte {
-	length := readLength()
-	if length.special {
-		switch length.val {
+	length, special := readLength()
+	if special {
+		switch length {
 		case 0:
 			b, _ := reader.ReadByte()
 			return []byte(strconv.Itoa(int(int8(b))))
@@ -232,24 +254,21 @@ func readString() []byte {
 			integer := readInteger(4, false)
 			return []byte(strconv.Itoa(int(integer)))
 		case 3:
-			clenth := readLength()
-			length := readLength()
-			bytes := make([]byte, clenth.val)
+			clenth, _ := readLength()
+			length, _ := readLength()
+			bytes := make([]byte, clenth)
 			reader.Read(bytes)
-			out := make([]byte, length.val)
-			lzf.Decompress(bytes, clenth.val, out, length.val)
+			out := make([]byte, length)
+			lzf.Decompress(bytes, clenth, out, length)
 			return out
 		}
 	}
-	bytes := make([]byte, length.val)
+	bytes := make([]byte, length)
 	reader.Read(bytes)
 	return bytes
 }
 
-func readLength() length {
-	var _length int
-	var special bool
-
+func readLength() (length int, special bool) {
 	b, _ := reader.ReadByte()
 
 	var rawByte = int(b & 0xff)
@@ -257,21 +276,20 @@ func readLength() length {
 	_type := (rawByte & 0xC0) >> 6
 
 	if _type == 3 {
-		_length = int(b & 0x3F)
+		length = int(b & 0x3F)
 		special = true
 	} else if _type == 0 {
-		_length = int(b & 0x3F)
+		length = int(b & 0x3F)
 	} else if _type == 1 {
 		nextByte, _ := reader.ReadByte()
 		i := ((int16(b) & 0x3F) << 8) | int16(nextByte)
-		_length = int(i)
+		length = int(i)
 	} else if rawByte == 0x80 {
-		_length = readInteger(4, true)
+		length = readInteger(4, true)
 	} else if rawByte == 0x81 {
-		_length = readInteger(8, true)
+		length = readInteger(8, true)
 	}
-
-	return length{_length, special}
+	return length, special
 }
 
 func readInteger(size int, isBigEndian bool) int {
